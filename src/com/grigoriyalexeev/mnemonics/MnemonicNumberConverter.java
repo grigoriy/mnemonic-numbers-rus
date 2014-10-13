@@ -2,6 +2,8 @@ package com.grigoriyalexeev.mnemonics;
 
 import java.io.*;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class MnemonicNumberConverter {
 
@@ -19,15 +21,20 @@ public class MnemonicNumberConverter {
     }};
     public static final String VOWELS_REGEX = "[АЕЁИОУЪЫЬЭЮЯаеёиоуъыьэюя]*?";
     public static final File[] DICTS = new File("resources/dict").listFiles();
-    public static final String OUTPUT_FILENAME = "mnemonic-numbers-map-2.txt";
+    public static final String OUTPUT_FILENAME = "mnemonic-numbers-map.txt";
+    public static final String ZALIZNYAK_REGEX = "с|м|ж|мо|жо|со|мн.";
 
 
     public static void main(String[] args) {
+
+        List<String> dict = readDictFiles(Arrays.asList(DICTS));
+
         if (args.length > 0) {
             for (String arg : args) {
-                Set<String> words = findWordsForNumber(arg);
+                Set<String> words = findWordsForNumber(arg, dict);
                 System.out.println(formatNumberAndWords(arg, words));
             }
+
         } else {
             List<String> numbersList = createNumbersList();
             int countEmptyNumbers = 0;
@@ -63,7 +70,8 @@ public class MnemonicNumberConverter {
             try {
                 String emptyNumbers = "";
                 for (String number : numbersList) {
-                    Set<String> words = findWordsForNumber(number);
+                    System.out.println(number);
+                    Set<String> words = findWordsForNumber(number, dict);
                     appendTextToFile(formatNumberAndWords(number, words), outFile);
                     if (words.size() == 0) {
                         emptyNumbers += (number + " ");
@@ -86,21 +94,21 @@ public class MnemonicNumberConverter {
         }
     }
 
-    private static Set<String> findWordsForNumber(String number) {
-        Set<String> words = new TreeSet<String>();
-        String regex = createRegexForNumber(number);
+    private static List<String> readDictFiles(List<File> dictFiles) {
 
-        FileInputStream fis = null;
-        InputStreamReader isr = null;
-        BufferedReader br = null;
-        for (File dict : DICTS) {
+        Pattern zaliznyakPattern = Pattern.compile(ZALIZNYAK_REGEX);
+        List<String> words = new LinkedList<String>();
+        for (File dictFile : dictFiles) {
+            FileInputStream fis = null;
+            InputStreamReader isr = null;
+            BufferedReader br = null;
             try {
-                fis = new FileInputStream(dict);
+                fis = new FileInputStream(dictFile);
                 isr = new InputStreamReader(fis);
                 br = new BufferedReader(isr);
                 String line;
                 while ((line = br.readLine()) != null) {
-                    String word = parseZaliznyakHelper(line, regex);
+                    String word = parseZaliznyakHelper(line, zaliznyakPattern);
                     if (word != null) {
                         words.add(word);
                     }
@@ -131,6 +139,22 @@ public class MnemonicNumberConverter {
                         e.printStackTrace();
                     }
                 }
+            }
+        }
+
+        return words;
+    }
+
+    private static Set<String> findWordsForNumber(String number, List<String> dict) {
+        Set<String> words = new TreeSet<String>();
+        Pattern pattern = createPatternForNumber(number);
+        Iterator<String> itr = dict.iterator();
+        while (itr.hasNext()) {
+            String word = itr.next();
+            Matcher matcher = pattern.matcher(word);
+            if (matcher.matches()) {
+                words.add(word);
+                itr.remove();
             }
         }
         return words;
@@ -197,20 +221,23 @@ public class MnemonicNumberConverter {
         return result;
     }
 
-    private static String createRegexForNumber(String number) {
+    private static Pattern createPatternForNumber(String number) {
         String regex = VOWELS_REGEX;
         for (int i = 0; i < number.length(); i++) {
             regex += DIGITS_TO_LETTERS.get(String.valueOf(number.charAt(i))) + VOWELS_REGEX;
         }
-        return regex;
+        return Pattern.compile(regex);
     }
 
-    private static String parseZaliznyakHelper(String line, String regex) {
+    private static String parseZaliznyakHelper(String line, Pattern regex) {
 
         String[] split = line.split(" ");
         String firstWord = split[0];
-        if (firstWord.matches(regex)) {
-            if (split.length < 3 || split[2].matches("с|м|ж|мо|жо|со|мн.")) {
+
+        if (split.length >= 3) {
+            String thirdWord = split[2];
+            Matcher matcher = regex.matcher(thirdWord);
+            if (matcher.matches()) {
                 return firstWord;
             }
         }
